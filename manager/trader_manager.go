@@ -593,8 +593,10 @@ func (tm *TraderManager) LoadTradersFromStore(st *store.Store) error {
 		err = tm.addTraderFromStore(traderCfg, aiModelCfg, exchangeCfg, st)
 		if err != nil {
 			logger.Infof("❌ Failed to add trader %s: %v", traderCfg.Name, err)
+			tm.loadErrors[traderCfg.ID] = err
 			continue
 		}
+		delete(tm.loadErrors, traderCfg.ID)
 	}
 
 	logger.Infof("✓ Successfully loaded %d traders to memory", len(tm.traders))
@@ -602,7 +604,14 @@ func (tm *TraderManager) LoadTradersFromStore(st *store.Store) error {
 }
 
 // addTraderFromStore internal method: adds trader from store configuration
-func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg *store.AIModel, exchangeCfg *store.Exchange, st *store.Store) error {
+func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg *store.AIModel, exchangeCfg *store.Exchange, st *store.Store) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic while loading trader %s (%s/%s): %v", traderCfg.Name, aiModelCfg.Provider, exchangeCfg.ExchangeType, r)
+			logger.Infof("❌ %v", err)
+		}
+	}()
+
 	if _, exists := tm.traders[traderCfg.ID]; exists {
 		return fmt.Errorf("trader ID '%s' already exists", traderCfg.ID)
 	}
